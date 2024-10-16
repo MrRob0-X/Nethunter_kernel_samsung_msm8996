@@ -13,23 +13,23 @@
 # Some Placeholders: [!] [*] [✓] [✗]
 
 # Default defconfig to use for builds.
-export CONFIG=nethunter_defconfig
+# export CONFIG=nethunter_defconfig
 
 # Default directory where kernel is located in.
 KDIR=$(pwd)
 export KDIR
 
 # Device name.
-export DEVICE="Samsung Tab S3"
+# export DEVICE="Samsung Tab S3"
 
 # Device codename.
-export CODENAME="gts3llte"
+# export CODENAME="gts3llte"
 
 # Builder name.
 export BUILDER="Robin"
 
 # Kernel repository URL.
-export REPO_URL="https://github.com/MrRob0-X/Nethunter_kernel_samsung_gts3llte"
+export REPO_URL="https://github.com/MrRob0-X/Nethunter_kernel_samsung_msm8996"
 
 # Commit hash of HEAD.
 COMMIT_HASH=$(git rev-parse --short HEAD)
@@ -52,6 +52,30 @@ export COMPILER=clang
 
 # Module building support. Set 1 to enable. | Set 0 to disable.
 export MODULE=0
+
+# Function to handle device selection (gts3lwifi or gts3llte)
+select_device() {
+    case "$1" in
+    "gts3llte")
+        export CONFIG=nethunter-gts3llte_defconfig
+        export CODENAME="gts3llte"
+        export DEVICE="Samsung Tab S3 LTE"
+        # Ensure line 105 in kernel/Makefile uses the gts3llte defconfig
+        sed -i '105s|arch/arm64/configs/gts3lwifi_eur_open_defconfig|arch/arm64/configs/gts3llte_eur_open_defconfig|' "${KDIR}"/kernel/Makefile
+        ;;
+    "gts3lwifi")
+        export CONFIG=nethunter-gts3lwifi_defconfig
+        export CODENAME="gts3lwifi"
+        export DEVICE="Samsung Tab S3 WiFi"
+        # Update line 105 in kernel/Makefile for gts3lwifi
+        sed -i '105s|arch/arm64/configs/gts3llte_eur_open_defconfig|arch/arm64/configs/gts3lwifi_eur_open_defconfig|' "${KDIR}"/kernel/Makefile
+        ;;
+    *)
+        echo "Invalid device codename. Please use gts3lwifi or gts3llte."
+        exit 1
+        ;;
+    esac
+}
 
 # Requirements
 if [ "${ci}" != 1 ]; then
@@ -101,7 +125,7 @@ if [[ "${MODULE}" = 1 ]]; then
 fi
 
 if [ ! -d "${KDIR}/anykernel3/" ]; then
-    git clone --depth=1 https://github.com/MrRob0-X/anykernel3 -b gts3llte anykernel3
+    git clone --depth=1 https://github.com/MrRob0-X/anykernel3 -b gts3lXXX anykernel3
 fi
 
 if [ "${ci}" != 1 ]; then
@@ -288,24 +312,35 @@ upr() {
 # A function to showcase the options provided for args-based usage.
 helpmenu() {
     echo -e "\n\e[1m
-usage: kver=<version number> zipn=<zip name> $0 <arg>
-example: $0 --kver=69 --zipn=Kernel-Beta mcfg
-example: $0 --kver=420 --zipn=Kernel-Beta mcfg img
-example: $0 --kver=69420 --zipn=Kernel-Beta mcfg img mkzip
-example: $0 --kver=1 --zipn=Kernel-Beta --obj=drivers/android/binder.o
-example: $0 --kver=2 --zipn=Kernel-Beta --obj=kernel/sched/
-example: $0 --kver=3 --zipn=Kernel-Beta --upr=r16 --modn=Beta-modules
-	 mcfg   Runs make menuconfig
-	 img    Builds Kernel
-	 dtb    Builds dtb(o).img
-	 mod    Builds out-of-tree modules
-	 mkzip  Builds anykernel3 zip
-	 --obj  Builds specific driver/subsystem
-	 rgn    Regenerates defconfig
-	 --upr  Uprevs kernel version in defconfig
-	 --kver kernel buildversion
-	 --zipn zip name
-	 --modn module name
+usage: kver=<version number> zipn=<zip name> $0 <command> [device]
+example: kver=69 zipn=Kernel-Beta bash $0 img gts3lwifi
+example: kver=420 zipn=Kernel-Beta bash $0 img mkzip gts3llte
+example: kver=3 zipn=Kernel-Beta bash $0 --obj=drivers/net/wireless.o gts3llte
+example: kver=2 zipn=Kernel-Beta upr=r16 bash $0 img mkzip gts3lwifi
+example: bash $0 img mkzip
+
+commands:
+    mcfg   - Runs 'make menuconfig' to configure the kernel
+    img    - Builds kernel image
+    dtb    - Builds Device Tree Blob(s)
+    mod    - Builds out-of-tree modules
+    mkzip  - Builds a flashable AnyKernel3 zip
+    rgn    - Regenerates defconfig
+    obj    - Builds a specific driver or object
+    upr    - Uprevs the kernel version in defconfig
+    clean  - Cleans the source and output directory
+
+device options:
+    gts3llte  - Build for Samsung Tab S3 LTE
+    gts3lwifi - Build for Samsung Tab S3 WiFi
+
+arguments:
+    kver=<version>      - Specify kernel version number
+    zipn=<zip name>     - Specify output zip file name
+    modn=<module name>  - Specify module name for module builds
+    upr=<version>       - Uprev the localversion in defconfig
+    obj=<file/path>     - Build specific object or subsystem
+
 \e[0m"
 }
 
@@ -317,142 +352,69 @@ ndialog() {
     BACKTITLE="Yet Another Kernel Builder"
     TITLE="YAKB v1.0"
     MENU="Choose one of the following options: "
+    
     OPTIONS=(1 "Build kernel"
-        2 "Build DTBs"
-        3 "Build modules"
-        4 "Open menuconfig"
-        5 "Regenerate defconfig"
-        6 "Uprev localversion"
-        7 "Build AnyKernel3 zip"
-        8 "Build a specific object"
-        9 "Clean"
-        10 "Exit"
+             2 "Build DTBs"
+             3 "Build modules"
+             4 "Open menuconfig"
+             5 "Regenerate defconfig"
+             6 "Uprev localversion"
+             7 "Build AnyKernel3 zip"
+             8 "Build a specific object"
+             9 "Clean"
+             10 "Exit"
     )
+
     CHOICE=$(dialog --clear \
         --backtitle "$BACKTITLE" \
         --title "$TITLE" \
         --menu "$MENU" \
         $HEIGHT $WIDTH $CHOICE_HEIGHT \
-        "${OPTIONS[@]}" \`
+        "${OPTIONS[@]}" \
         2>&1 >/dev/tty)
+    
     clear
     case "$CHOICE" in
     1)
         clear
-        img
-        echo -ne "\e[1mPress enter to continue or 0 to exit! \e[0m"
-        read -r a1
-        if [ "$a1" == "0" ]; then
-            exit 0
-        else
-            clear
-            ndialog
-        fi
+        img "$device_codename"  # Pass device codename
         ;;
     2)
         clear
-        dtb
-        echo -ne "\e[1mPress enter to continue or 0 to exit! \e[0m"
-        read -r a1
-        if [ "$a1" == "0" ]; then
-            exit 0
-        else
-            clear
-            ndialog
-        fi
+        dtb "$device_codename"  # Pass device codename
         ;;
     3)
         clear
-        mod
-        echo -ne "\e[1mPress enter to continue or 0 to exit! \e[0m"
-        read -r a1
-        if [ "$a1" == "0" ]; then
-            exit 0
-        else
-            clear
-            ndialog
-        fi
+        mod "$device_codename"  # Pass device codename
         ;;
     4)
         clear
-        mcfg
-        echo -ne "\e[1mPress enter to continue or 0 to exit! \e[0m"
-        read -r a1
-        if [ "$a1" == "0" ]; then
-            exit 0
-        else
-            clear
-            ndialog
-        fi
+        mcfg "$device_codename"  # Pass device codename
         ;;
     5)
         clear
-        rgn
-        echo -ne "\e[1mPress enter to continue or 0 to exit! \e[0m"
-        read -r a1
-        if [ "$a1" == "0" ]; then
-            exit 0
-        else
-            clear
-            ndialog
-        fi
+        rgn "$device_codename"  # Pass device codename
         ;;
     6)
         dialog --inputbox --stdout "Enter version number: " 15 50 | tee .t
         ver=$(cat .t)
         clear
-        upr "$ver"
+        upr "$ver" "$device_codename"  # Pass device codename
         rm .t
-        echo -ne "\e[1mPress enter to continue or 0 to exit! \e[0m"
-        read -r a1
-        if [ "$a1" == "0" ]; then
-            exit 0
-        else
-            clear
-            ndialog
-        fi
         ;;
     7)
-        mkzip
-        echo -ne "\e[1mPress enter to continue or 0 to exit! \e[0m"
-        read -r a1
-        if [ "$a1" == "0" ]; then
-            exit 0
-        else
-            clear
-            ndialog
-        fi
+        mkzip "$device_codename"  # Pass device codename
         ;;
     8)
         dialog --inputbox --stdout "Enter object path: " 15 50 | tee .f
         ob=$(cat .f)
-        if [ -z "$ob" ]; then
-            dialog --inputbox --stdout "Enter object path: " 15 50 | tee .f
-        fi
         clear
-        obj "$ob"
+        obj "$ob" "$device_codename"  # Pass device codename
         rm .f
-        echo -ne "\e[1mPress enter to continue or 0 to exit! \e[0m"
-        read -r a1
-        if [ "$a1" == "0" ]; then
-            exit 0
-        else
-            clear
-            ndialog
-        fi
         ;;
     9)
         clear
-        clean
-        img
-        echo -ne "\e[1mPress enter to continue or 0 to exit! \e[0m"
-        read -r a1
-        if [ "$a1" == "0" ]; then
-            exit 0
-        else
-            clear
-            ndialog
-        fi
+        clean  # Clean doesn't need a device codename
         ;;
     10)
         echo -e "\n\e[1m Exiting YAKB...\e[0m"
@@ -460,6 +422,16 @@ ndialog() {
         exit 0
         ;;
     esac
+    
+    # After each action, ask to continue or exit
+    echo -ne "\e[1mPress enter to continue or 0 to exit! \e[0m"
+    read -r a1
+    if [ "$a1" == "0" ]; then
+        exit 0
+    else
+        clear
+        ndialog
+    fi
 }
 
 if [ "${ci}" == 1 ]; then
@@ -470,54 +442,81 @@ if [[ -z $* ]]; then
     ndialog
 fi
 
-for arg in "$@"; do
-    case "${arg}" in
-    "mcfg")
-        mcfg
-        ;;
-    "img")
-        img
-        ;;
-    "dtb")
-        dtb
-        ;;
-    "mod")
-        mod
-        ;;
-    "mkzip")
-        mkzip
-        ;;
-    "--obj="*)
-        object="${arg#*=}"
-        if [[ -z "$object" ]]; then
-            echo "Use --obj=filename.o"
-            exit 1
+# Handling arguments
+if [[ $# -gt 0 ]]; then
+    # Capture the device codename if provided, or use "clean" without needing a codename
+    if [[ "$1" == "clean" ]]; then
+        clean  # Clean doesn't need a device codename
+        exit 0
+    elif [[ "$#" -eq 1 ]]; then
+        # If only one argument is provided, check if it's a valid device codename or show dialog
+        if [[ "$1" == "gts3llte" || "$1" == "gts3lwifi" ]]; then
+            select_device "$1"
+            ndialog  # Show the dialog with the selected device
         else
-            obj "$object"
-        fi
-        ;;
-    "rgn")
-        rgn
-        ;;
-    "--upr="*)
-        vers="${arg#*=}"
-        if [[ -z "$vers" ]]; then
-            echo "Use --upr=version"
+            echo -e "\n\e[1;31mInvalid command: $1\e[0m"
+            helpmenu  # Show help for invalid command
             exit 1
-        else
-            upr "$vers"
         fi
-        ;;
-    "clean")
-        clean
-        ;;
-    "help")
-        helpmenu
-        exit 1
-        ;;
-    *)
-        helpmenu
-        exit 1
-        ;;
-    esac
-done
+    else
+        # If more than one argument is provided, get the last argument as the device codename
+        device_codename="${@: -1}"  # Get the last argument as the device codename
+        commands=("${@:1:$#-1}")    # Get all arguments except the last one
+
+        # Validate device codename
+        if [[ "$device_codename" != "gts3llte" && "$device_codename" != "gts3lwifi" ]]; then
+            echo -e "\n\e[1;31mInvalid device codename: $device_codename.\e[0m Please use 'gts3lwifi' or 'gts3llte'."
+            helpmenu  # Show help for invalid codename
+            exit 1
+        fi
+
+        # Select the device
+        select_device "$device_codename"
+
+        # Directly execute commands without opening the dialog
+        for cmd in "${commands[@]}"; do
+            case "$cmd" in
+            "mcfg")
+                mcfg "$device_codename"
+                ;;
+            "img")
+                img "$device_codename"
+                ;;
+            "dtb")
+                dtb "$device_codename"
+                ;;
+            "mod")
+                mod "$device_codename"
+                ;;
+            "mkzip")
+                mkzip "$device_codename"
+                ;;
+            "--obj="*)
+                object="${cmd#*=}" 
+                obj "$object" "$device_codename"
+                ;;
+            "rgn")
+                rgn "$device_codename"
+                ;;
+            "clean")
+                clean  # Clean doesn't need a device codename
+                ;;
+            "upr")
+                upr "$device_codename"
+                ;;
+            "help")
+                helpmenu
+                exit 0
+                ;;
+            *)
+                echo -e "\n\e[1;31mInvalid command: $cmd\e[0m"
+                helpmenu  # Show help for invalid command
+                exit 1
+                ;;
+            esac
+        done
+    fi
+else
+    # If no arguments are provided, show the dialog
+    ndialog
+fi 
