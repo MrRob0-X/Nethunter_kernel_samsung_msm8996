@@ -48,7 +48,7 @@ PROCS=$(nproc --all)
 export PROCS
 
 # Compiler to use for builds.
-export COMPILER=clang
+export COMPILER=gcc
 
 # Module building support. Set 1 to enable. | Set 0 to disable.
 export MODULE=0
